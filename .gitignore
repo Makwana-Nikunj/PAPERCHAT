@@ -1,0 +1,18 @@
+# Root
+.qodo/
+.gemini/
+
+# Node
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
