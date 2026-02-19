@@ -60,4 +60,14 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Keep-alive self-ping — prevents cold starts on Render free tier
+if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+    const INTERVAL = 14 * 60 * 1000; // 14 minutes
+    setInterval(() => {
+        fetch(process.env.RENDER_EXTERNAL_URL)
+            .then(() => console.log('Keep-alive ping sent'))
+            .catch(() => { });
+    }, INTERVAL);
+}
+
 export { server };

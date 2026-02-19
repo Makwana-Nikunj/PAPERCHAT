@@ -10,6 +10,8 @@ import { sql } from "../db/index.js";
 const getMessagesByChatId = asyncHandler(async (req, res) => {
     const { chatId } = req.params || {};
     const userId = req.user?.id;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const before = parseInt(req.query.before) || null;
 
     if (!chatId) {
         throw new ApiError(400, "Chat ID is required");
@@ -28,16 +30,41 @@ const getMessagesByChatId = asyncHandler(async (req, res) => {
         throw new ApiError(403, "You are not authorized to access this chat");
     }
 
-    const messages = await sql`
-        SELECT m.id, m.content, m.sender_id, m.chat_id, m.is_read, m.created_at,
-               u.username AS sender_username
-        FROM messages m
-        JOIN users u ON m.sender_id = u.id
-        WHERE m.chat_id = ${chatId}
-        ORDER BY m.created_at ASC
-    `;
+    let messages;
+    if (before) {
+        messages = await sql`
+            SELECT m.id, m.content, m.sender_id, m.chat_id, m.is_read, m.created_at,
+                   u.username AS sender_username
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.chat_id = ${chatId} AND m.id < ${before}
+            ORDER BY m.created_at DESC
+            LIMIT ${limit + 1}
+        `;
+    } else {
+        messages = await sql`
+            SELECT m.id, m.content, m.sender_id, m.chat_id, m.is_read, m.created_at,
+                   u.username AS sender_username
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.chat_id = ${chatId}
+            ORDER BY m.created_at DESC
+            LIMIT ${limit + 1}
+        `;
+    }
 
-    return res.status(200).json(new ApiResponse(200, messages, "Messages retrieved successfully"));
+    const hasMore = messages.length > limit;
+    if (hasMore) messages.pop();
+
+    // Reverse to ASC order for frontend display
+    messages.reverse();
+
+    const nextCursor = hasMore ? messages[0].id : null;
+
+    return res.status(200).json(new ApiResponse(200, {
+        messages,
+        pagination: { hasMore, nextCursor }
+    }, "Messages retrieved successfully"));
 });
 
 

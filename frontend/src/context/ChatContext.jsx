@@ -100,7 +100,9 @@ export function ChatProvider({ children }) {
         setLoadingMessages(true);
         try {
             const res = await api.get(`/messages/${chatId}`);
-            setMessages(res.data || []);
+            // Handle paginated response { messages, pagination }
+            const data = res.data;
+            setMessages(data?.messages ?? data ?? []);
         } catch (err) {
             console.error("Failed to load messages:", err);
             setMessages([]);
