@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
@@ -6,13 +6,32 @@ import { useChat } from "../context/ChatContext";
 export default function HomePage() {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
-    const { chats, requests, acceptRequest, rejectRequest, loadRequests } = useChat();
+    const { chats, requests, acceptRequest, rejectRequest, loadRequests, messages, loadingMessages, sendMessage, editMessage, deleteMessage, switchChat, activeChat } = useChat();
     const [filter, setFilter] = useState("all");
     const [search, setSearch] = useState("");
-    const [selectedChat, setSelectedChat] = useState(null);
+
+    // Chat panel state
+    const [input, setInput] = useState("");
+    const [editingId, setEditingId] = useState(null);
+    const [editContent, setEditContent] = useState("");
+    const [contextMenu, setContextMenu] = useState(null);
+    const messagesEndRef = useRef(null);
+    const inputRef = useRef(null);
 
     useEffect(() => {
         loadRequests();
+    }, []);
+
+    // Auto-scroll to bottom when messages change
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    // Close context menu on click
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener("click", handleClick);
+        return () => window.removeEventListener("click", handleClick);
     }, []);
 
     const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : "?");
@@ -30,192 +49,268 @@ export default function HomePage() {
     });
 
     const handleChatClick = (chat) => {
-        setSelectedChat(chat.id);
-        navigate(`/chat/${chat.id}`, { state: { chat } });
+        switchChat(chat);
+        setInput("");
+        setEditingId(null);
+        setContextMenu(null);
+    };
+
+    // Chat panel handlers
+    const handleSend = (e) => {
+        e.preventDefault();
+        if (!input.trim() || !activeChat) return;
+        sendMessage(activeChat.id, input);
+        setInput("");
+        inputRef.current?.focus();
+    };
+
+    const handleContextMenu = (e, msg) => {
+        if (msg.sender_id !== user?.id) return;
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, messageId: msg.id, content: msg.content });
+    };
+
+    const handleEdit = () => {
+        if (!contextMenu) return;
+        setEditingId(contextMenu.messageId);
+        setEditContent(contextMenu.content);
+        setContextMenu(null);
+    };
+
+    const handleEditSubmit = (e) => {
+        e.preventDefault();
+        if (!editContent.trim()) return;
+        editMessage(editingId, editContent);
+        setEditingId(null);
+        setEditContent("");
+    };
+
+    const handleDelete = () => {
+        if (!contextMenu) return;
+        deleteMessage(contextMenu.messageId);
+        setContextMenu(null);
+    };
+
+    const formatTime = (dateStr) => {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    };
+
+    const formatDateSeparator = (dateStr) => {
+        const date = new Date(dateStr);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (date.toDateString() === today.toDateString()) return "Today";
+        if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+        return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    };
+
+    const getDateFromMsg = (msg) => new Date(msg.created_at).toDateString();
+    let lastDate = null;
+
+    const handleBackToSidebar = () => {
+        switchChat(null);
     };
 
     return (
         <div className="home-layout">
-            {/* ===== SIDEBAR ===== */}
-            <div className="home-sidebar" style={{ position: "relative" }}>
-                {/* Tape decoration at top — desktop only */}
-                <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%) rotate(1deg)", width: 90, zIndex: 3 }} className="hide-mobile">
-                    <div className="tape-strip" style={{ height: 18, background: "rgba(196, 181, 253, 0.35)", borderColor: "rgba(139, 92, 246, 0.2)" }} />
-                </div>
-
-                {/* Header */}
-                <div style={{ padding: "20px 16px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                    <div className="paper-avatar" style={{ width: 34, height: 34, fontSize: 14, cursor: "pointer", background: "var(--color-crayon-purple)", color: "white" }} onClick={() => navigate("/profile")}>
+            {/* ===== TOP HEADER ===== */}
+            <header className="paper-header">
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div className="paper-avatar anim-bounce" style={{ width: 40, height: 40, background: "var(--color-crayon-purple)", color: "white", cursor: "pointer" }} onClick={() => navigate("/profile")}>
                         {user?.avatar ? (
                             <img src={user.avatar} alt={user.username} />
                         ) : (
                             <span>{getInitial(user?.username)}</span>
                         )}
                     </div>
-                    <h1 style={{ fontFamily: "var(--font-brand)", fontSize: 26, fontWeight: 700, lineHeight: 1, flex: 1 }}>
-                        PAPERCHAT
-                    </h1>
-                    <div style={{ display: "flex", gap: 6 }}>
-                        <button className="paper-btn paper-btn-primary paper-btn-small" style={{ transform: "none" }} onClick={() => navigate("/add-user")}>
-                            Add
-                        </button>
-                        <button className="paper-btn paper-btn-small" style={{ transform: "none" }} onClick={handleLogout}>
-                            Logout
-                        </button>
+                    <div className="paper-logo">PAPERCHAT</div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10 }}>
+                    <button className="paper-btn paper-btn-primary anim-pop" onClick={() => navigate("/add-user")}>
+                        Add
+                    </button>
+                    <button className="paper-btn anim-pop" onClick={handleLogout}>
+                        Logout
+                    </button>
+                </div>
+            </header>
+
+            {/* ===== MAIN CONTENT ===== */}
+            <div className="paper-main-container">
+                {/* ===== SIDEBAR ===== */}
+                <div className={`paper-sidebar${activeChat ? " hide-mobile" : ""}`}>
+                    {/* Search */}
+                    <div style={{ marginBottom: 16 }}>
+                        <input
+                            className="paper-input"
+                            type="text"
+                            placeholder="Search notes..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
                     </div>
-                </div>
 
-                {/* Search */}
-                <div style={{ padding: "0 16px 10px" }}>
-                    <input
-                        className="paper-input"
-                        type="text"
-                        placeholder="Search notes..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        style={{ fontSize: 14, padding: "8px 14px", borderRadius: 12 }}
-                    />
-                </div>
-
-                {/* Filter tabs */}
-                <div style={{ padding: "0 16px 10px", display: "flex", gap: 6 }}>
-                    {["all", "pinned", "unread"].map((f) => (
-                        <button
-                            key={f}
-                            className="paper-btn paper-btn-small"
-                            style={{
-                                padding: "4px 14px",
-                                fontSize: 12,
-                                borderRadius: 20,
-                                background: filter === f ? "var(--color-crayon-yellow)" : "var(--color-paper-white)",
-                                fontWeight: filter === f ? 700 : 400,
-                                transform: "none",
-                                borderWidth: 1.5
-                            }}
-                            onClick={() => setFilter(f)}
-                        >
-                            {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Dashed separator */}
-                <div style={{ borderBottom: "2px dashed var(--color-paper-tan)", margin: "0 16px" }} />
-
-                {/* Friend Requests */}
-                {requests.length > 0 && (
-                    <div style={{ padding: "10px 16px 0" }}>
-                        <div style={{ fontFamily: "var(--font-brand)", fontSize: 16, fontWeight: 600, color: "var(--color-ink)", marginBottom: 8, paddingLeft: 4 }}>
-                            Friend Requests ({requests.length})
-                        </div>
-                        {requests.map((req) => (
-                            <div key={req.id} className="note-card anim-slideUp" style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, marginBottom: 6 }}>
-                                <div className="paper-avatar" style={{ width: 34, height: 34, fontSize: 14, position: "relative" }}>
-                                    {req.sender_avatar ? (
-                                        <img src={req.sender_avatar} alt={req.sender_username} />
-                                    ) : (
-                                        <span>{getInitial(req.sender_username)}</span>
-                                    )}
-                                    <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, borderRadius: "50%", background: "var(--color-crayon-green)", border: "2px solid var(--color-paper-white)" }} />
-                                </div>
-                                <div style={{ flex: 1, fontFamily: "var(--font-label)", fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{req.sender_username}</div>
-                                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                                    <button className="paper-btn paper-btn-success paper-btn-small" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => acceptRequest(req.id)}>
-                                        Accept
-                                    </button>
-                                    <button className="paper-btn paper-btn-danger paper-btn-small" style={{ padding: "3px 8px", fontSize: 11 }} onClick={() => rejectRequest(req.id)}>
-                                        x
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                        <div style={{ borderBottom: "2px dashed var(--color-paper-tan)", margin: "6px 0" }} />
-                    </div>
-                )}
-
-                {/* Section title */}
-                <div style={{ padding: "10px 20px 6px", fontFamily: "var(--font-brand)", fontSize: 16, fontWeight: 600, color: "var(--color-ink)", display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ color: "var(--color-pencil)" }}>&rarr;</span> Recent Chats
-                </div>
-
-                {/* Chat list */}
-                <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 12px" }}>
-                    {filteredChats.length === 0 ? (
-                        <div style={{ padding: "40px 16px", textAlign: "center" }}>
-                            <p style={{ fontFamily: "var(--font-label)", fontSize: 15, color: "var(--color-pencil)", marginBottom: 12 }}>No conversations yet</p>
-                            <p style={{ fontFamily: "var(--font-note)", fontSize: 13, color: "var(--color-pencil)", marginBottom: 16 }}>Add a friend to start passing notes</p>
-                            <button className="paper-btn paper-btn-primary" onClick={() => navigate("/add-user")}>
-                                Add Your First Friend
-                            </button>
-                        </div>
-                    ) : (
-                        filteredChats.map((chat, i) => (
-                            <div
-                                key={chat.id}
-                                className={`note-card anim-slideUp delay-${Math.min(i + 1, 5)}`}
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    padding: 10,
-                                    marginBottom: 6,
-                                    background: selectedChat === chat.id ? "var(--color-crayon-yellow)" : "var(--color-paper-white)"
-                                }}
-                                onClick={() => handleChatClick(chat)}
+                    {/* Filter tabs */}
+                    <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                        {["all", "pinned", "unread"].map((f) => (
+                            <button
+                                key={f}
+                                className={`paper-tab ${filter === f ? "active" : ""}`}
+                                onClick={() => setFilter(f)}
                             >
-                                {/* Avatar with online dot */}
-                                <div className="paper-avatar" style={{ width: 40, height: 40, fontSize: 16, position: "relative" }}>
-                                    {chat.partner_avatar ? (
-                                        <img src={chat.partner_avatar} alt={chat.partner_name} />
-                                    ) : (
-                                        <span>{getInitial(chat.partner_name)}</span>
-                                    )}
-                                    <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, borderRadius: "50%", background: "var(--color-crayon-green)", border: "2px solid var(--color-paper-white)" }} />
-                                </div>
+                                {f.charAt(0).toUpperCase() + f.slice(1)}
+                            </button>
+                        ))}
+                    </div>
 
-                                {/* Name + last message */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontFamily: "var(--font-label)", fontSize: 14, fontWeight: 600 }}>{chat.partner_name}</div>
-                                    {chat.last_message && (
-                                        <div style={{ fontFamily: "var(--font-note)", fontSize: 12, color: "var(--color-pencil)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chat.last_message}</div>
-                                    )}
-                                </div>
+                    <div style={{ borderBottom: "2px dashed var(--color-paper-tan)", marginBottom: 16 }} />
 
-                                {/* Selection circle */}
-                                <div style={{
-                                    width: 20,
-                                    height: 20,
-                                    borderRadius: "50%",
-                                    border: "2px solid var(--color-ink)",
-                                    background: selectedChat === chat.id ? "var(--color-ink)" : "transparent",
-                                    flexShrink: 0,
-                                    transition: "background 0.2s ease"
-                                }} />
-                            </div>
-                        ))
+                    {/* Friend Requests */}
+                    {requests.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                            <div className="section-label">Friend Requests ({requests.length})</div>
+                            {requests.map((req) => (
+                                <div key={req.id} className="request-card anim-slideUp">
+                                    <div className="paper-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
+                                        {req.sender_avatar ? <img src={req.sender_avatar} alt={req.sender_username} /> : <span>{getInitial(req.sender_username)}</span>}
+                                    </div>
+                                    <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }} className="font-label">{req.sender_username}</div>
+                                    <button className="paper-icon-btn success" onClick={() => acceptRequest(req.id)}>✓</button>
+                                    <button className="paper-icon-btn danger" onClick={() => rejectRequest(req.id)}>✕</button>
+                                </div>
+                            ))}
+                            <div style={{ borderBottom: "2px dashed var(--color-paper-tan)", margin: "16px 0" }} />
+                        </div>
                     )}
-                </div>
-            </div>
 
-            {/* ===== MAIN AREA (desktop only) ===== */}
-            <div className="home-main notebook-lines notebook-margin" style={{ position: "relative" }}>
-                {/* Washi tape at top */}
-                <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 3 }}>
-                    <div style={{ borderBottom: "2px dashed var(--color-paper-tan)" }}>
-                        <div className="washi-tape-pink washi-tape" style={{ height: 8, borderRadius: 0, opacity: 0.4 }} />
+                    <div className="section-label" style={{ marginBottom: 8 }}>&rarr; Recent Chats</div>
+
+                    {/* Chat list */}
+                    <div className="chat-list">
+                        {filteredChats.length === 0 ? (
+                            <div className="empty-state-sidebar">
+                                <p>No conversations yet</p>
+                            </div>
+                        ) : (
+                            filteredChats.map((chat, i) => (
+                                <div
+                                    key={chat.id}
+                                    className={`chat-item anim-slideUp delay-${Math.min(i + 1, 5)} ${activeChat?.id === chat.id ? "active" : ""}`}
+                                    onClick={() => handleChatClick(chat)}
+                                >
+                                    <div className="paper-avatar" style={{ width: 44, height: 44, fontSize: 18 }}>
+                                        {chat.partner_avatar ? <img src={chat.partner_avatar} alt={chat.partner_name} /> : <span>{getInitial(chat.partner_name)}</span>}
+                                        <div className="online-dot" />
+                                    </div>
+                                    <div className="chat-info">
+                                        <div className="chat-name">{chat.partner_name}</div>
+                                        {chat.last_message && <div className="chat-preview">{chat.last_message}</div>}
+                                    </div>
+                                    {/* Unread count / Selection indicator */}
+                                    {activeChat?.id === chat.id ? (
+                                        <div className="selection-circle filled" />
+                                    ) : (
+                                        <div className="selection-circle" />
+                                    )}
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
 
-                {/* Empty state */}
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
-                    <div style={{ fontFamily: "var(--font-brand)", fontSize: 32, color: "var(--color-paper-tan)" }}>
-                        PAPERCHAT
+                {/* ===== CHAT AREA ===== */}
+                <div className={`paper-chat-area${activeChat ? " show-mobile" : ""}`}>
+                    <div className="paper-chat-container">
+                        {activeChat ? (
+                            <>
+                                {/* Chat Header */}
+                                <div className="chat-header">
+                                    <div className="mobile-back" onClick={handleBackToSidebar}>&larr;</div>
+                                    <div className="paper-avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
+                                        {activeChat.partner_avatar ? <img src={activeChat.partner_avatar} alt={activeChat.partner_name} /> : <span>{getInitial(activeChat.partner_name)}</span>}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="chat-header-name">{activeChat.partner_name}</div>
+                                    </div>
+                                    <div className="chat-actions">
+                                        <button className="paper-icon-btn">C</button>
+                                        <button className="paper-icon-btn">VC</button>
+                                    </div>
+                                </div>
+
+                                {/* Messages */}
+                                <div className="chat-messages notebook-lines">
+                                    <div className="messages-inner">
+                                        {loadingMessages ? (
+                                            <div className="loading-container"><div className="pencil-loading" /></div>
+                                        ) : messages.length === 0 ? (
+                                            <div className="empty-chat">
+                                                <p>No notes yet — say hello!</p>
+                                            </div>
+                                        ) : (
+                                            messages.map((msg) => {
+                                                const isOwn = msg.sender_id === user?.id;
+                                                return (
+                                                    <div key={msg.id} className={`message-row ${isOwn ? "sent" : "received"}`}>
+                                                        <div
+                                                            className={`message-bubble ${isOwn ? "sent" : "received"}`}
+                                                            onContextMenu={(e) => handleContextMenu(e, msg)}
+                                                        >
+                                                            {editingId === msg.id ? (
+                                                                <form onSubmit={handleEditSubmit} className="edit-form">
+                                                                    <input className="paper-input-mini" value={editContent} onChange={(e) => setEditContent(e.target.value)} autoFocus />
+                                                                    <button type="submit" className="paper-btn-mini success">ok</button>
+                                                                    <button type="button" className="paper-btn-mini" onClick={() => setEditingId(null)}>x</button>
+                                                                </form>
+                                                            ) : (
+                                                                <div className="message-content">{msg.content}</div>
+                                                            )}
+                                                            <div className="message-time">{formatTime(msg.created_at)}</div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                        <div ref={messagesEndRef} />
+                                    </div>
+                                </div>
+
+                                {/* Input Area */}
+                                <div className="chat-input-area">
+                                    <form onSubmit={handleSend} className="chat-form">
+                                        <input
+                                            ref={inputRef}
+                                            className="paper-input"
+                                            type="text"
+                                            placeholder="Write a note..."
+                                            value={input}
+                                            onChange={(e) => setInput(e.target.value)}
+                                        />
+                                        <button className="paper-btn paper-btn-primary" type="submit">Send</button>
+                                    </form>
+                                </div>
+
+                                {/* Context Menu */}
+                                {contextMenu && (
+                                    <div className="paper-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+                                        <div className="paper-context-menu-item" onClick={handleEdit}>Edit</div>
+                                        <div className="paper-context-menu-item" onClick={handleDelete}>Delete</div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="no-chat-selected">
+                                <div className="paper-logo large">PAPERCHAT</div>
+                                <p>Select a conversation to start reading notes</p>
+                            </div>
+                        )}
                     </div>
-                    <p style={{ fontFamily: "var(--font-note)", fontSize: 15, color: "var(--color-pencil)" }}>
-                        Select a conversation to start reading notes
-                    </p>
                 </div>
             </div>
         </div>
     );
 }
+
