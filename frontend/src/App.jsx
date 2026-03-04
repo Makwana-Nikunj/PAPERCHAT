@@ -9,6 +9,7 @@ const HomePage = lazy(() => import("./pages/HomePage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const AddUserPage = lazy(() => import("./pages/AddUserPage"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
+const VideoCallPage = lazy(() => import("./pages/VideoCallPage"));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -94,6 +95,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/call/:chatId"
+          element={
+            <ProtectedRoute>
+              <VideoCallPage />
             </ProtectedRoute>
           }
         />

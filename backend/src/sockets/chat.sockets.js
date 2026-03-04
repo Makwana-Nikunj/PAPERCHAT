@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import { getUserChats, createMessage, editMessage, deleteMessage } from "../controllers/message.controllers.js";
 
+import { initCallSocket } from "./call.sockets.js";
+
 const initChatSocket = (io) => {
 
     // JWT AUTH MIDDLEWARE — expects accessToken from frontend
@@ -63,6 +65,9 @@ const initChatSocket = (io) => {
                     console.error("Error deleting message:", err);
                 }
             });
+
+            // initialize call events
+            initCallSocket(io, socket);
 
             // DISCONNECT
             socket.on("disconnect", () => {

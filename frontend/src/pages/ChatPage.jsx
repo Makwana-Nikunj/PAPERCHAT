@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
+import { useVideoCall } from "../context/useVideoCall";
 
 export default function ChatPage() {
     const navigate = useNavigate();
@@ -9,6 +10,7 @@ export default function ChatPage() {
     const location = useLocation();
     const { user } = useAuth();
     const { messages, loadingMessages, sendMessage, editMessage, deleteMessage, loadMessages } = useChat();
+    const { incomingCall, setIncomingCall, startCall, acceptCall, rejectCall, callStatus } = useVideoCall();
 
     const [input, setInput] = useState("");
     const [editingId, setEditingId] = useState(null);
@@ -36,6 +38,13 @@ export default function ChatPage() {
         window.addEventListener("click", handleClick);
         return () => window.removeEventListener("click", handleClick);
     }, []);
+
+    // Enrich incoming call with partner info
+    useEffect(() => {
+        if (incomingCall && !incomingCall.callerName && chat) {
+            setIncomingCall(prev => prev ? { ...prev, callerName: partnerName, callerAvatar: partnerAvatar } : prev);
+        }
+    }, [incomingCall, chat, partnerName, partnerAvatar, setIncomingCall]);
 
     const handleSend = (e) => {
         e.preventDefault();
@@ -70,6 +79,24 @@ export default function ChatPage() {
         if (!contextMenu) return;
         deleteMessage(contextMenu.messageId);
         setContextMenu(null);
+    };
+
+    const handleStartCall = () => {
+        startCall(parseInt(chatId));
+        navigate(`/call/${chatId}`, {
+            state: { partnerName, partnerAvatar }
+        });
+    };
+
+    const handleAcceptCall = () => {
+        acceptCall();
+        navigate(`/call/${incomingCall.chatId}`, {
+            state: { partnerName: incomingCall.callerName || partnerName, partnerAvatar: incomingCall.callerAvatar || partnerAvatar }
+        });
+    };
+
+    const handleRejectCall = () => {
+        rejectCall();
     };
 
     const formatTime = (dateStr) => {
@@ -112,10 +139,23 @@ export default function ChatPage() {
                     )}
                     <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, borderRadius: "50%", background: "var(--color-crayon-green)", border: "2px solid var(--color-paper-white)" }} />
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                     <div style={{ fontFamily: "var(--font-brand)", fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{partnerName}</div>
                     <div style={{ fontFamily: "var(--font-note)", fontSize: 11, color: "var(--color-pencil)" }}>online now</div>
                 </div>
+
+                {/* Video call button */}
+                <button
+                    className="chat-call-btn"
+                    onClick={handleStartCall}
+                    title="Video call"
+                    disabled={callStatus !== "idle"}
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="23 7 16 12 23 17 23 7" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                </button>
             </div>
 
             {/* Messages area — notebook lines */}
@@ -208,6 +248,47 @@ export default function ChatPage() {
                     </button>
                 </form>
             </div>
+
+            {/* Incoming call overlay */}
+            {incomingCall && (
+                <div className="incoming-call-overlay">
+                    <div className="incoming-call-card">
+                        <div className="incoming-call-label">
+                            <span className="phone-ring-anim">📞</span> Incoming Call
+                        </div>
+
+                        <div className="incoming-call-avatar">
+                            {(incomingCall.callerAvatar || partnerAvatar) ? (
+                                <img src={incomingCall.callerAvatar || partnerAvatar} alt={incomingCall.callerName || partnerName} />
+                            ) : (
+                                <span>{getInitial(incomingCall.callerName || partnerName)}</span>
+                            )}
+                            <div className="pulse-ring" />
+                            <div className="pulse-ring pulse-ring-delay" />
+                        </div>
+
+                        <div className="incoming-call-name">{incomingCall.callerName || partnerName}</div>
+                        <div className="incoming-call-subtitle">wants to video chat with you</div>
+
+                        <div className="incoming-call-actions">
+                            <button
+                                className="incoming-action-btn incoming-action-reject"
+                                onClick={handleRejectCall}
+                                data-label="Decline"
+                            >
+                                ✕
+                            </button>
+                            <button
+                                className="incoming-action-btn incoming-action-accept"
+                                onClick={handleAcceptCall}
+                                data-label="Accept"
+                            >
+                                ✓
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
