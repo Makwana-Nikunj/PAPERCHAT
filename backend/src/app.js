@@ -9,9 +9,10 @@ import performanceMiddleware from "./middleware/performance.middleware.js";
 const app = express();
 const server = createServer(app);
 
+const defaultOrigins = ["http://localhost:5173", "http://localhost:5174", "https://paperchat-zeta.vercel.app"];
 const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(",").map(o => o.trim().replace(/\/$/, "")) // Remove trailing slash
-    : ["http://localhost:5173", "http://localhost:5174"];
+    ? [...defaultOrigins, ...process.env.CORS_ORIGIN.split(",").map(o => o.trim().replace(/\/$/, ""))]
+    : defaultOrigins;
 
 app.use(
     cors({
