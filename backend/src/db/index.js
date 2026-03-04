@@ -6,7 +6,8 @@ const connectDB = async () => {
   try {
     sql = postgres(process.env.DATABASE_URL, {
       ssl: 'require',
-      max: 10
+      max: 10,
+      prepare: false // Required for Supabase PgBouncer (pooler) on port 6543
     });
     // ===============================
     // USERS TABLE
