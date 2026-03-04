@@ -1,9 +1,11 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { initChatSocket } from "./sockets/chat.sockets.js";
+import performanceMiddleware from "./middleware/performance.middleware.js";
 const app = express();
 const server = createServer(app);
 
@@ -22,6 +24,8 @@ app.use(
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
+app.use(compression());
+app.use(performanceMiddleware);
 
 
 
@@ -36,6 +40,11 @@ app.use("/api/users", userRouter);
 app.use("/api/chats", chatRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/requests", requestRouter);
+
+// Health check endpoint for keep-alive pings
+app.get("/api/health", (req, res) => {
+    res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
 
 
 const io = new Server(server, {
@@ -61,13 +70,7 @@ app.use((err, req, res, next) => {
 });
 
 // Keep-alive self-ping — prevents cold starts on Render free tier
-if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
-    const INTERVAL = 14 * 60 * 1000; // 14 minutes
-    setInterval(() => {
-        fetch(process.env.RENDER_EXTERNAL_URL)
-            .then(() => console.log('Keep-alive ping sent'))
-            .catch(() => { });
-    }, INTERVAL);
-}
+import { keepAlive } from "./utils/keepAlive.js";
+keepAlive();
 
 export { server };
