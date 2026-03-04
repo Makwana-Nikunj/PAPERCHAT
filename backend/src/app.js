@@ -10,15 +10,25 @@ const app = express();
 const server = createServer(app);
 
 const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(",").map(o => o.trim())
+    ? process.env.CORS_ORIGIN.split(",").map(o => o.trim().replace(/\/$/, "")) // Remove trailing slash
     : ["http://localhost:5173", "http://localhost:5174"];
 
 app.use(
     cors({
-        origin: allowedOrigins,
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+        origin: function (origin, callback) {
+            // allow requests with no origin (like mobile apps or curl requests)
+            if (!origin) return callback(null, true);
+            if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes("*")) {
+                callback(null, true);
+            } else {
+                console.warn(`Blocked CORS request from origin: ${origin}`);
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
         credentials: true,
+        optionsSuccessStatus: 200 // Some legacy browsers choke on 204
     })
 );
 app.use(express.json({ limit: "16kb" }));
