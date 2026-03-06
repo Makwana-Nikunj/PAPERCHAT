@@ -3,7 +3,13 @@ import { getUserChats, createMessage, editMessage, deleteMessage } from "../cont
 
 import { initCallSocket } from "./call.sockets.js";
 
+let ioInstance = null;
+
+const getIO = () => ioInstance;
+
 const initChatSocket = (io) => {
+
+    ioInstance = io;
 
     // JWT AUTH MIDDLEWARE — expects accessToken from frontend
     io.use((socket, next) => {
@@ -80,4 +86,4 @@ const initChatSocket = (io) => {
     });
 };
 
-export { initChatSocket };
+export { initChatSocket, getIO };

@@ -8,8 +8,7 @@ export default function HomePage() {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
     const { chats, requests, acceptRequest, rejectRequest, loadRequests, messages, loadingMessages, sendMessage, editMessage, deleteMessage, switchChat, activeChat } = useChat();
-    const { incomingCall, startCall, acceptCall, rejectCall, callStatus } = useVideoCall();
-    const [filter, setFilter] = useState("all");
+    const { incomingCall, setIncomingCall, startCall, acceptCall, rejectCall, callStatus } = useVideoCall();
     const [search, setSearch] = useState("");
 
     // Chat panel state
@@ -23,6 +22,16 @@ export default function HomePage() {
     useEffect(() => {
         loadRequests();
     }, []);
+
+    // Enrich incoming call with partner name from any chat
+    useEffect(() => {
+        if (incomingCall && !incomingCall.callerName) {
+            const incomingChat = chats.find(c => String(c.id) === String(incomingCall.chatId));
+            if (incomingChat) {
+                setIncomingCall(prev => prev ? { ...prev, callerName: incomingChat.partner_name, callerAvatar: incomingChat.partner_avatar } : prev);
+            }
+        }
+    }, [incomingCall, chats, setIncomingCall]);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -93,8 +102,17 @@ export default function HomePage() {
         setContextMenu(null);
     };
 
+    const parseUTC = (dateStr) => {
+        if (!dateStr) return new Date();
+        const s = String(dateStr);
+        if (!s.endsWith("Z") && !s.includes("+") && !/\d{2}:\d{2}$/.test(s.slice(-6))) {
+            return new Date(s + "Z");
+        }
+        return new Date(s);
+    };
+
     const formatTime = (dateStr) => {
-        const date = new Date(dateStr);
+        const date = parseUTC(dateStr);
         return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     };
 
@@ -162,19 +180,6 @@ export default function HomePage() {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
-                    </div>
-
-                    {/* Filter tabs */}
-                    <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                        {["all", "pinned", "unread"].map((f) => (
-                            <button
-                                key={f}
-                                className={`paper-tab ${filter === f ? "active" : ""}`}
-                                onClick={() => setFilter(f)}
-                            >
-                                {f.charAt(0).toUpperCase() + f.slice(1)}
-                            </button>
-                        ))}
                     </div>
 
                     <div style={{ borderBottom: "2px dashed var(--color-paper-tan)", marginBottom: 16 }} />

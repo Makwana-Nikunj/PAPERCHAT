@@ -9,7 +9,7 @@ export default function ChatPage() {
     const { chatId } = useParams();
     const location = useLocation();
     const { user } = useAuth();
-    const { messages, loadingMessages, sendMessage, editMessage, deleteMessage, loadMessages } = useChat();
+    const { chats, messages, loadingMessages, sendMessage, editMessage, deleteMessage, loadMessages } = useChat();
     const { incomingCall, setIncomingCall, startCall, acceptCall, rejectCall, callStatus } = useVideoCall();
 
     const [input, setInput] = useState("");
@@ -19,8 +19,9 @@ export default function ChatPage() {
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
-    const chat = location.state?.chat;
-    const partnerName = chat?.partner_name || "Chat";
+    // Look up chat from context (works even after navigation from VideoCallPage)
+    const chat = chats.find(c => c.id === parseInt(chatId)) || location.state?.chat;
+    const partnerName = chat?.partner_name || "Friend";
     const partnerAvatar = chat?.partner_avatar;
 
     const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : "?");
@@ -39,12 +40,15 @@ export default function ChatPage() {
         return () => window.removeEventListener("click", handleClick);
     }, []);
 
-    // Enrich incoming call with partner info
+    // Enrich incoming call with partner name from any chat
     useEffect(() => {
-        if (incomingCall && !incomingCall.callerName && chat) {
-            setIncomingCall(prev => prev ? { ...prev, callerName: partnerName, callerAvatar: partnerAvatar } : prev);
+        if (incomingCall && !incomingCall.callerName) {
+            const incomingChat = chats.find(c => String(c.id) === String(incomingCall.chatId));
+            if (incomingChat) {
+                setIncomingCall(prev => prev ? { ...prev, callerName: incomingChat.partner_name, callerAvatar: incomingChat.partner_avatar } : prev);
+            }
         }
-    }, [incomingCall, chat, partnerName, partnerAvatar, setIncomingCall]);
+    }, [incomingCall, chats, setIncomingCall]);
 
     const handleSend = (e) => {
         e.preventDefault();
@@ -99,13 +103,23 @@ export default function ChatPage() {
         rejectCall();
     };
 
+    const parseUTC = (dateStr) => {
+        if (!dateStr) return new Date();
+        const s = String(dateStr);
+        // If no timezone info, treat as UTC
+        if (!s.endsWith("Z") && !s.includes("+") && !/\d{2}:\d{2}$/.test(s.slice(-6))) {
+            return new Date(s + "Z");
+        }
+        return new Date(s);
+    };
+
     const formatTime = (dateStr) => {
-        const date = new Date(dateStr);
+        const date = parseUTC(dateStr);
         return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     };
 
     const formatDateSeparator = (dateStr) => {
-        const date = new Date(dateStr);
+        const date = parseUTC(dateStr);
         const today = new Date();
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);

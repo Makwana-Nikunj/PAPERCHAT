@@ -56,10 +56,28 @@ export function ChatProvider({ children }) {
             setMessages((prev) => prev.filter((m) => m.id !== messageId));
         });
 
+        // New chat created (friend request accepted)
+        sock.on("new_chat", (chat) => {
+            setChats((prev) => {
+                if (prev.some((c) => c.id === chat.id)) return prev;
+                return [chat, ...prev];
+            });
+        });
+
+        // Incoming friend request
+        sock.on("new_request", (request) => {
+            setRequests((prev) => {
+                if (prev.some((r) => r.id === request.id)) return prev;
+                return [request, ...prev];
+            });
+        });
+
         return () => {
             sock.off("receive_message");
             sock.off("message_updated");
             sock.off("message_deleted");
+            sock.off("new_chat");
+            sock.off("new_request");
             disconnectSocket();
             socketRef.current = null;
         };

@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useVideoCall } from "../context/useVideoCall";
 
 export default function VideoCallPage() {
     const navigate = useNavigate();
-    const { chatId } = useParams();
     const location = useLocation();
 
     const partnerName = location.state?.partnerName || "Friend";
@@ -44,15 +43,15 @@ export default function VideoCallPage() {
         if (callStatus === "idle" && !callActive) {
             // Small delay so user can see the call ended
             const timer = setTimeout(() => {
-                navigate(`/chat/${chatId}`, { replace: true });
+                navigate("/home", { replace: true });
             }, 800);
             return () => clearTimeout(timer);
         }
-    }, [callStatus, callActive, chatId, navigate]);
+    }, [callStatus, callActive, navigate]);
 
     const handleEndCall = () => {
         endCall();
-        navigate(`/chat/${chatId}`, { replace: true });
+        navigate("/home", { replace: true });
     };
 
     const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : "?");
