@@ -1044,7 +1044,7 @@ This project is licensed under the **MIT License**.
 
 <div align="center">
 
-**Built with 📄 and ✨ by [Your Name]**
+**Built with 📄 and ✨ by Nikunj Makwana**
 
 [🌐 Live Demo](https://paperchat-zeta.vercel.app) · [Report Bug](https://github.com/YOUR_USERNAME/paperchat/issues) · [Request Feature](https://github.com/YOUR_USERNAME/paperchat/issues)
 
