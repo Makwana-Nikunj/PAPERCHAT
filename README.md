@@ -56,7 +56,17 @@ A handcrafted real-time chat application with an origami-inspired paper fold aes
 | 💬 One-on-One Chats | Private conversations between friends |
 | 📊 Chat List | View all active chats with last message preview |
 
-### 🔐 Security & Authentication
+### � Video Calling
+
+| Feature | Description |
+| ------- | ----------- |
+| 📞 Peer-to-Peer Calls | Direct WebRTC video and audio streaming |
+| 🔔 Instant Ringing | Real-time incoming call dialog with caller info |
+| 📷 Media Controls | Toggle camera and microphone during calls |
+| 🔄 Robust Signaling | Reliable connection state tracking via Socket.IO |
+| 📱 Responsive Video | Adapts to mobile and desktop screens seamlessly |
+
+### �🔐 Security & Authentication
 
 | Feature | Description |
 | ------- | ----------- |
@@ -100,6 +110,7 @@ A handcrafted real-time chat application with an origami-inspired paper fold aes
 | **React Router** | 7.13 | Client-side routing & navigation |
 | **Tailwind CSS** | 4.1 | Utility-first styling framework |
 | **Socket.IO Client** | 4.8 | Real-time bidirectional communication |
+| **WebRTC API** | Native | Peer-to-peer video streaming |
 
 ### Backend
 
@@ -121,78 +132,92 @@ A handcrafted real-time chat application with an origami-inspired paper fold aes
 
 ### System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client (Browser)                         │
-│  ┌────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │  React Router  │  │  Auth Context   │  │  Chat Context   │  │
-│  │   (Routes)     │  │ (JWT Tokens)    │  │  (Messages)     │  │
-│  └────────────────┘  └─────────────────┘  └─────────────────┘  │
-│         │                     │                     │            │
-│         └─────────────────────┼─────────────────────┘            │
-│                               │                                  │
-│                    ┌──────────┴───────────┐                      │
-│                    │                      │                      │
-│              ┌─────▼──────┐        ┌──────▼──────┐              │
-│              │   Axios    │        │ Socket.IO   │              │
-│              │  (REST)    │        │  Client     │              │
-│              └─────┬──────┘        └──────┬──────┘              │
-└────────────────────┼──────────────────────┼───────────────────────┘
-                     │                      │
-                     │ HTTP/HTTPS           │ WebSocket (WSS)
-                     │                      │
-┌────────────────────▼──────────────────────▼───────────────────────┐
-│                      Express Server (Node.js)                      │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │                    Middleware Stack                           │ │
-│  │  CORS → Cookie Parser → JSON Parser → Auth Middleware        │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-│                               │                                    │
-│         ┌─────────────────────┼─────────────────────┐             │
-│         │                     │                     │             │
-│  ┌──────▼──────┐       ┌──────▼──────┐      ┌──────▼──────┐      │
-│  │   Routes    │       │ Controllers │      │  Socket.IO  │      │
-│  │  /api/...   │       │  (Logic)    │      │   Events    │      │
-│  └──────┬──────┘       └──────┬──────┘      └──────┬──────┘      │
-│         │                     │                     │             │
-│         └─────────────────────┼─────────────────────┘             │
-│                               │                                    │
-│                      ┌────────▼────────┐                           │
-│                      │   PostgreSQL    │                           │
-│                      │  (Neon Cloud)   │                           │
-│                      └─────────────────┘                           │
-│                               │                                    │
-│                      ┌────────▼────────┐                           │
-│                      │   Cloudinary    │                           │
-│                      │  (Avatar CDN)   │                           │
-│                      └─────────────────┘                           │
-└───────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Client["🖥 Client (Browser)"]
+        Router["React Router<br/>(Routes)"]
+        AuthCtx["Auth Context<br/>(JWT Tokens)"]
+        ChatCtx["Chat Context<br/>(Messages)"]
+        VideoCtx["Video Context<br/>(WebRTC Sync)"]
+        
+        Router --- AuthCtx --- ChatCtx --- VideoCtx
+    end
+
+    subgraph Network["🌐 Network Layer"]
+        Axios["Axios<br/>(REST API)"]
+        Socket["Socket.IO Client<br/>(WebSockets)"]
+        WebRTC["WebRTC<br/>(Peer-to-Peer)"]
+    end
+
+    Client --> Axios
+    Client --> Socket
+    Client <--> WebRTC
+
+    subgraph Server["⚙️ Express Server (Node.js)"]
+        Middleware["Middleware Stack<br/>(CORS → Cookies → Auth)"]
+        Routes["API Routes<br/>(/api/...)"]
+        Controllers["Controllers<br/>(Business Logic)"]
+        WSS["Socket.IO Events<br/>(Rooms & Signaling)"]
+        
+        Middleware --> Routes --> Controllers
+        Middleware --> WSS
+    end
+
+    subgraph External["☁️ External Services"]
+        Neon[("PostgreSQL<br/>(Neon Cloud)")]
+        Cloudinary["Cloudinary<br/>(Avatar CDN)"]
+    end
+
+    Axios <-->|"HTTP/HTTPS<br/>httpOnly Cookies"| Middleware
+    Socket <-->|"WebSocket (WSS)"| WSS
+    
+    Controllers <--> Neon
+    WSS <--> Neon
+    Controllers --> Cloudinary
 ```
 
 ### Request Flow
 
 #### REST API Flow
-```
-1. Client sends HTTP request with JWT cookie
-2. Express receives → CORS check
-3. Auth middleware verifies JWT
-4. Route handler executes
-5. Controller processes business logic
-6. Database query via postgres template
-7. Response formatted (ApiResponse/ApiError)
-8. JSON sent back to client with Set-Cookie if needed
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Auth Middleware
+    participant R as Route Controller
+    participant DB as PostgreSQL
+    
+    C->>M: HTTP Request + JWT Cookie
+    M->>M: Verify Signature & Expiry
+    alt Token Invalid
+        M-->>C: 401 Unauthorized
+    else Token Valid
+        M->>R: req.user attached, next()
+        R->>DB: Query / Mutation
+        DB-->>R: Data Rows
+        R-->>C: JSON Response
+    end
 ```
 
 #### WebSocket Flow
-```
-1. Client connects with accessToken in handshake
-2. Socket.IO verifies JWT
-3. User joins personal room + all chat rooms
-4. Client emits event (send_message, edit_message, etc.)
-5. Server receives event → validates → processes
-6. Database operation executed
-7. Server broadcasts to relevant room (io.to(chatId).emit)
-8. All clients in room receive update instantly
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Socket.IO Server
+    participant DB as PostgreSQL
+    
+    C->>S: Handshake + JWT accessToken
+    S->>S: Verify Token
+    S->>DB: Fetch user's chats
+    DB-->>S: Chat IDs
+    S->>S: Join matching Rooms (chatId)
+    
+    C->>S: emit("send_message", {chatId, content})
+    S->>DB: INSERT INTO messages
+    DB-->>S: New Message ID
+    S->>S: io.to(chatId).emit(...)
+    S-->>C: Broadcast to all room members
 ```
 
 ### Database Schema
@@ -264,6 +289,7 @@ npm install
 Create environment files:
 
 **Backend** (`backend/.env`):
+
 ```env
 PORT=3000
 NODE_ENV=development
@@ -279,6 +305,7 @@ CORS_ORIGIN=http://localhost:5173
 ```
 
 **Frontend** (`frontend/.env`):
+
 ```env
 VITE_API_URL=http://localhost:3000/api
 VITE_SOCKET_URL=http://localhost:3000
@@ -411,6 +438,7 @@ paperchat/
 | **POST** | `/users/refresh-token` | Refresh access token | ❌ No (refresh token in cookie) |
 
 #### Register Request
+
 ```json
 POST /api/users/register
 Content-Type: application/json
@@ -423,6 +451,7 @@ Content-Type: application/json
 ```
 
 #### Login Request
+
 ```json
 POST /api/users/login
 Content-Type: application/json
@@ -434,6 +463,7 @@ Content-Type: application/json
 ```
 
 #### Response Format
+
 ```json
 {
   "statusCode": 200,
@@ -463,12 +493,14 @@ Content-Type: application/json
 | **PATCH** | `/users/change-avatar` | Upload new avatar | ✅ Yes |
 
 #### Search Users
+
 ```bash
 GET /api/users/search?query=john
 Authorization: Bearer {accessToken}
 ```
 
 #### Change Avatar
+
 ```bash
 POST /api/users/change-avatar
 Content-Type: multipart/form-data
@@ -493,6 +525,7 @@ avatar: [file]
 | **DELETE** | `/messages/:id` | Delete message | ✅ Yes |
 
 #### Send Message
+
 ```json
 POST /api/messages
 Content-Type: application/json
@@ -514,6 +547,7 @@ Authorization: Bearer {accessToken}
 | **PATCH** | `/requests/:id/reject` | Reject request | ✅ Yes |
 
 #### Send Friend Request
+
 ```json
 POST /api/requests
 Content-Type: application/json
@@ -541,63 +575,46 @@ Authorization: Bearer {accessToken}
 
 ### JWT Token Strategy
 
-```
-┌──────────────┐
-│    Client    │
-└──────┬───────┘
-       │ 1. POST /api/users/login
-       │    { email, password }
-       ▼
-┌──────────────────────────────────┐
-│         Express Server           │
-│                                  │
-│  2. Verify credentials           │
-│  3. Generate Access Token (7d)   │
-│  4. Generate Refresh Token (7d)  │
-│  5. Store refresh token in DB    │
-│  6. Set httpOnly cookies:        │
-│     - accessToken                │
-│     - refreshToken               │
-└──────┬───────────────────────────┘
-       │ 7. Response with user data
-       ▼
-┌──────────────┐
-│    Client    │
-│              │
-│  8. Store user in AuthContext    │
-│  9. Redirect to /home            │
-└──────┬───────┘
-       │ 10. Subsequent API requests
-       │     include cookies automatically
-       ▼
-┌──────────────────────────────────┐
-│    Auth Middleware (verifyJwt)   │
-│                                  │
-│  11. Extract token from cookie   │
-│  12. Verify JWT signature        │
-│  13. Check expiration            │
-│  14. Attach user to req.user     │
-│  15. Call next()                 │
-└──────┬───────────────────────────┘
-       │ 16. Route handler executes
-       ▼
-┌──────────────┐
-│   Database   │
-└──────────────┘
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server as Express Server
+    participant DB as Database
+
+    Client->>Server: 1. POST /api/users/login (email, password)
+    Server->>Server: 2. Verify Credentials
+    Server->>Server: 3. Sign Access (7d) & Refresh (7d) Tokens
+    Server->>DB: 4. Store refresh_token
+    Server-->>Client: 5. Set httpOnly Cookies (access, refresh)
+    Client->>Client: 6. Store user in AuthContext
+    Client->>Client: 7. Redirect to /home
+    
+    Note over Client,Server: Subsequent API Requests
+    
+    Client->>Server: 8. Request + Cookies
+    Server->>Server: 9. Auth Middleware (verifyJwt)
+    Server->>Server: 10. Extract & verify token
+    Server->>DB: 11. Controller executes query
+    Server-->>Client: 12. Response
 ```
 
 ### Token Refresh Flow
 
 When access token expires, the frontend can call `/api/users/refresh-token`:
 
-```
-1. Client calls refresh endpoint with refreshToken cookie
-2. Server verifies refresh token from cookie
-3. Check if token matches DB record
-4. Generate new access token + refresh token
-5. Update refresh token in database
-6. Set new cookies
-7. Return success response
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    participant DB
+
+    Client->>Server: 1. POST /refresh-token (+ refreshToken cookie)
+    Server->>Server: 2. Verify token from cookie
+    Server->>DB: 3. Check if matching refresh_token in DB
+    Server->>Server: 4. Generate new Access + Refresh Tokens
+    Server->>DB: 5. Update refresh_token
+    Server-->>Client: 6. Set new Cookies
+    Client->>Client: 7. Retry failed request automatically
 ```
 
 ---
@@ -630,6 +647,13 @@ chats.forEach(chat => socket.join(String(chat.id))); // All chat rooms
 | `send_message` | `{ chatId: number, content: string }` | Send new message |
 | `edit_message` | `{ messageId: number, content: string }` | Edit existing message |
 | `delete_message` | `{ messageId: number }` | Delete message |
+| `call_user` | `{ chatId: number }` | Initiate video call to chat |
+| `call_accepted` | `{ chatId: number }` | Accept incoming call |
+| `webrtc_offer` | `{ chatId: number, offer: RTCSessionDescription }` | WebRTC session offer |
+| `webrtc_answer` | `{ chatId: number, answer: RTCSessionDescription }` | WebRTC session answer |
+| `webrtc_ice_candidate` | `{ chatId, candidate: RTCIceCandidate }` | WebRTC connection metadata |
+| `call_rejected` | `{ chatId: number }` | Decline incoming call |
+| `end_call` | `{ chatId: number }` | End an active video call |
 
 #### Server → Client
 
@@ -638,6 +662,14 @@ chats.forEach(chat => socket.join(String(chat.id))); // All chat rooms
 | `receive_message` | `{ id, content, chatId, senderId, ... }` | New message received |
 | `message_updated` | `{ id, content, chatId, ... }` | Message edited |
 | `message_deleted` | `{ messageId, chatId }` | Message removed |
+| `new_chat` | `{ id, partner_name... }` | Friend request accepted, chat created |
+| `incoming_call` | `{ from: number, chatId: number }` | Incoming video call |
+| `call_accepted` | `{ from: number }` | Partner accepted call |
+| `webrtc_offer` | `{ from, chatId, offer }` | Receiving remote WebRTC offer |
+| `webrtc_answer` | `{ from, answer }` | Receiving remote WebRTC answer |
+| `webrtc_ice_candidate` | `{ candidate }` | Receiving remote ICE candidate |
+| `call_rejected` | `{ from: number }` | Partner rejected call |
+| `call_ended` | `{ from: number }` | Partner ended the call |
 
 ### Example Usage
 
@@ -699,15 +731,18 @@ This ensures users only receive messages from chats they're part of.
 Manages authentication state across the app.
 
 **State:**
+
 - `user` — Current user object or `null`
 - `loading` — Initial auth check loading state
 
 **Methods:**
+
 - `login(email, password)` — Login and set user
 - `logout()` — Logout and clear user
 - `updateUser(userData)` — Update user profile
 
 **Usage:**
+
 ```jsx
 import { useAuth } from '../context/AuthContext';
 
@@ -725,11 +760,13 @@ function MyComponent() {
 Manages chat and message state with real-time updates.
 
 **State:**
+
 - `chats` — Array of user's chats
 - `messages` — Messages for current chat
 - `socket` — Socket.IO client instance
 
 **Methods:**
+
 - `fetchChats()` — Load user's chats
 - `fetchMessages(chatId)` — Load chat messages
 - `sendMessage(chatId, content)` — Send via WebSocket
@@ -737,6 +774,7 @@ Manages chat and message state with real-time updates.
 - `deleteMessage(messageId)` — Delete via WebSocket
 
 **Real-Time Listeners:**
+
 ```jsx
 useEffect(() => {
   socket.on('receive_message', (message) => {
@@ -761,17 +799,20 @@ useEffect(() => {
 The app features a handcrafted paper aesthetic with:
 
 **Typography:**
+
 - `Caveat` — Primary handwritten font
 - `Kalam` — Alternative handwritten
 - `Patrick Hand` — Display font
 
 **Visual Elements:**
+
 - 📓 Notebook ruled lines (`background-image: repeating-linear-gradient`)
 - 🎀 Washi tape accents (`.tape-accent` class)
 - 📐 Folded corners (`:before` pseudo-elements)
 - ✂️ Torn paper edges (`border-radius` with box-shadow)
 
 **Custom Scrollbars:**
+
 ```css
 ::-webkit-scrollbar {
   width: 10px;
@@ -807,6 +848,7 @@ The app features a handcrafted paper aesthetic with:
 ### Database Performance
 
 **Indexes:**
+
 ```sql
 CREATE INDEX idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX idx_messages_created_at ON messages(created_at);
@@ -815,6 +857,7 @@ CREATE INDEX idx_chats_user2_id ON chats(user2_id);
 ```
 
 **Triggers:**
+
 ```sql
 CREATE TRIGGER update_messages_updated_at
   BEFORE UPDATE ON messages
@@ -831,6 +874,7 @@ CREATE TRIGGER update_messages_updated_at
 The frontend is deployed on **Vercel** with SPA routing support.
 
 **Configuration** (`vercel.json`):
+
 ```json
 {
   "rewrites": [
@@ -840,16 +884,19 @@ The frontend is deployed on **Vercel** with SPA routing support.
 ```
 
 **Build Command:**
+
 ```bash
 cd frontend
 npm run build
 ```
 
 **Environment Variables:**
+
 - `VITE_API_URL` = `https://paperchat-b28g.onrender.com/api`
 - `VITE_SOCKET_URL` = `https://paperchat-b28g.onrender.com`
 
 **Deploy:**
+
 ```bash
 # Via Vercel CLI
 vercel --prod
@@ -862,6 +909,7 @@ vercel --prod
 The backend is deployed on **Render** as a Web Service.
 
 **Configuration** (`render.yaml`):
+
 ```yaml
 services:
   - type: web
@@ -875,6 +923,7 @@ services:
 ```
 
 **Start Command:**
+
 ```bash
 npm start  # Runs: node src/index.js
 ```
@@ -882,6 +931,7 @@ npm start  # Runs: node src/index.js
 **Environment Variables:**
 
 Set in Render dashboard:
+
 ```
 PORT=3000
 NODE_ENV=production
@@ -902,6 +952,7 @@ RENDER_EXTERNAL_URL=https://paperchat-b28g.onrender.com
 ### Database — Neon PostgreSQL
 
 **Setup:**
+
 1. Create project at [neon.tech](https://neon.tech)
 2. Copy connection string
 3. Add to `DATABASE_URL` env var
